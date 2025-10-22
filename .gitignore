@@ -1,5 +1,21 @@
+# Python
 __pycache__/
-*.db
-*.log
+*.pyc
+*.pyo
+*.pyd
 venv/
-.env
+env/
+instance/
+*.db
+*.sqlite3
+
+# Flask
+*.log
+*.env
+*.bak
+*.swp
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
