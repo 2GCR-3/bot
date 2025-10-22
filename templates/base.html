@@ -1,0 +1,201 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Nestlé SmartBot — Nessa</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <div class="left">
+      <div class="card">
+        <h1>Nestlé SmartBot — <span class="nessa-name">Nessa</span></h1>
+        <div class="search-bar">
+          <form id="searchForm" onsubmit="return false;">
+            <input id="q" placeholder="Cari produk (mis: Milo, Dancow, Nescafe)" maxlength="50"/>
+            <button class="btn" onclick="search()">Cari</button>
+          </form>
+          <form method="post" action="{{ url_for('clear_session') }}">
+            <button class="btn muted" type="submit">Reset</button>
+          </form>
+        </div>
+        <div id="results" class="results"></div>
+      </div>
+
+      <div class="card chat-section">
+        <h3>Chat Interface</h3>
+        <div class="chatbox" id="chatbox">
+          <div class="msg bot">👋 Nessa: Halo, saya Nessa — asisten virtual Nestlé. Ketik <b>'bantuan'</b> untuk melihat perintah.</div>
+        </div>
+        <div class="chat-input">
+          <input id="user" placeholder="Tulis pesan..." onkeydown="if(event.key==='Enter'){sendMessage();}">
+          <button class="btn send-btn" onclick="sendMessage()">Kirim</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="card">
+        <h3>🛒 Keranjang</h3>
+        <div id="cart_contents"><div class="small">Belum ada item</div></div>
+
+        <form id="checkoutForm" onsubmit="return false;" class="checkout-form">
+          <input id="cust_name" placeholder="Nama" />
+          <input id="cust_phone" placeholder="Telepon" />
+          <input id="cust_address" placeholder="Alamat (opsional)"/>
+          <label class="small">Kode promo (opsional):</label>
+          <input id="promo" placeholder="contoh: WELCOME10"/>
+          <div class="checkout-buttons">
+            <button class="btn" onclick="checkout(false)">Checkout</button>
+            <button class="btn catering" onclick="checkout(true)">Checkout (Catering)</button>
+          </div>
+        </form>
+        <hr/>
+        <a href="/admin/orders" class="admin-link">Admin: Lihat Pesanan</a>
+      </div>
+
+      <div class="card tips">
+        <h4>💡 Fitur Cepat</h4>
+        <div class="small">
+          - Ketik <b>‘rekomendasi gizi usia 30 weight_loss’</b><br/>
+          - Ketik <b>‘catering quote 120’</b><br/>
+          - Ketik <b>‘produk milo’</b> atau klik cari
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+async function api(path, data){
+  const res = await fetch(path, {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify(data || {})
+  });
+  return res.json();
+}
+
+async function search(){
+  const q = document.getElementById("q").value.trim();
+  if(!q) return;
+  const r = await api("/api/search", {q});
+  const results = r.results || [];
+  const el = document.getElementById("results");
+  if(results.length === 0){
+    el.innerHTML = "<div class='small'>Tidak ditemukan</div>";
+    return;
+  }
+  let html = "";
+  results.forEach(p => {
+    html += `<div class="product">
+      <div><strong>${p.name}</strong><div class="small">${p.description || ''}</div></div>
+      <div><div>${formatMoney(p.price)}</div>
+      <button class="btn small-btn" onclick="addToCart(${p.id})">Tambah</button></div>
+    </div>`;
+  });
+  el.innerHTML = html;
+}
+
+function formatMoney(v){
+  try{ return 'Rp' + Number(v).toLocaleString(); }catch(e){ return v; }
+}
+
+async function addToCart(pid){
+  await api("/api/cart/add", {product_id:pid, qty:1});
+  await refreshCart();
+  botSay("🛍️ Nessa: Item telah ditambahkan ke keranjang!");
+}
+
+async function refreshCart(){
+  const r = await fetch("/api/cart/view");
+  const j = await r.json();
+  const el = document.getElementById("cart_contents");
+  if(!j.items || j.items.length === 0){
+    el.innerHTML = "<div class='small'>Belum ada item</div>";
+    return;
+  }
+  let html = "<ul>";
+  j.items.forEach(it => {
+    html += `<li>${it.name} x${it.qty} = ${formatMoney(it.line_total)}</li>`;
+  });
+  html += `</ul><div class='small total'>Subtotal: ${formatMoney(j.subtotal)}</div>`;
+  el.innerHTML = html;
+}
+
+// Efek mengetik ala ChatGPT
+function botSay(text){
+  const cb = document.getElementById("chatbox");
+  const div = document.createElement("div");
+  div.className = "msg bot";
+  cb.appendChild(div);
+
+  let i = 0;
+  const speed = 20; // kecepatan ketik (ms per karakter)
+  const cleanText = text.replace(/\n/g,"<br/>");
+  function typeEffect(){
+    if(i < cleanText.length){
+      div.innerHTML = cleanText.substring(0, i+1);
+      i++;
+      cb.scrollTop = cb.scrollHeight;
+      setTimeout(typeEffect, speed);
+    } else {
+      div.innerHTML = cleanText; // final
+    }
+  }
+  typeEffect();
+}
+
+
+function userSay(text){
+  const cb = document.getElementById("chatbox");
+  const div = document.createElement("div");
+  div.className="msg usr";
+  div.innerText = text;
+  cb.appendChild(div);
+  cb.scrollTop = cb.scrollHeight;
+}
+
+async function sendMessage(){
+  const input = document.getElementById("user");
+  const text = input.value.trim();
+  if(!text) return;
+  userSay(text);
+  input.value = "";
+  // tampilkan indikator "Nessa sedang mengetik..."
+    const typingDiv = document.createElement("div");
+    typingDiv.className = "msg bot";
+    typingDiv.innerHTML = "Nessa 🤖 sedang mengetik<span class='dotting'>.</span>";
+    cb = document.getElementById("chatbox");
+    cb.appendChild(typingDiv);
+    cb.scrollTop = cb.scrollHeight;
+
+    // tunggu sebentar supaya realistis
+    const r = await api("/api/chat", {message:text});
+    typingDiv.remove();
+    botSay(r.response);
+
+    await refreshCart();
+}
+
+async function checkout(isCatering){
+  const name = document.getElementById("cust_name").value.trim();
+  const phone = document.getElementById("cust_phone").value.trim();
+  const address = document.getElementById("cust_address").value.trim();
+  const promo = document.getElementById("promo").value.trim();
+  if(!name || !phone){
+    alert("Nama dan telepon wajib");
+    return;
+  }
+  const payload = {name, phone, address, promo, is_catering:isCatering};
+  const r = await api("/api/checkout", payload);
+  botSay(r.message || "Terima kasih telah berbelanja di Nestlé!");
+  await refreshCart();
+}
+
+document.addEventListener("DOMContentLoaded", function(){
+  refreshCart();
+});
+</script>
+</body>
+</html>
